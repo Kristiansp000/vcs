@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Camcum Meet - Instant WebRTC Mesh</title>
+    <title>Camcum Meet - Rock Solid Video Call</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -15,10 +15,9 @@
             }
         }
     </script>
-    <!-- Library PeerJS, Lucide Icons, & MQTT Over WebSockets -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Agora Web SDK & Lucide Icons -->
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.22.0.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
     <style>
         .glass {
@@ -38,7 +37,7 @@
                 <span class="text-base font-bold tracking-tight bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">Camcum Meet</span>
             </div>
             <div id="room-status-bar" class="hidden flex items-center gap-2 text-xs bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 font-mono">
-                <span>Room: <b id="display-room-id" class="text-indigo-400 select-all">---</b></span>
+                <span>Room Channel: <b id="display-room-id" class="text-indigo-400 select-all">---</b></span>
             </div>
         </div>
     </header>
@@ -47,41 +46,29 @@
     <main class="flex-1 w-full max-w-7xl mx-auto p-4 flex flex-col justify-center items-center">
         
         <!-- PANEL LOBBY -->
-        <div id="panel-lobby" class="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col gap-6">
+        <div id="panel-lobby" class="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col gap-5">
             <div class="text-center">
-                <h2 class="text-xl font-bold tracking-tight">Mulai Rapat Video</h2>
-                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Buat atau gabung ke room video instan.</p>
+                <h2 class="text-xl font-bold tracking-tight">Masuk Rapat Video</h2>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Bekerja 100% di semua jaringan seluler & Wi-Fi.</p>
             </div>
 
+            <!-- Input Room Channel -->
             <div>
-                <label class="text-[11px] text-zinc-400 block mb-1 font-semibold uppercase tracking-wider">Nama Anda</label>
-                <input type="text" id="input-username" placeholder="Masukkan nama panggilan..." class="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 text-zinc-800 dark:text-zinc-200 font-medium">
+                <label class="text-[11px] text-zinc-400 block mb-1 font-semibold uppercase tracking-wider">Nama / Kode Room (Bebas)</label>
+                <input type="text" id="input-room" placeholder="Contoh: rapat-it atau 12345" class="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 text-zinc-800 dark:text-zinc-200 font-mono text-center tracking-wide">
             </div>
 
-            <div class="border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
-
-            <button id="btn-create-room" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10">
-                <i data-lucide="plus-circle" class="w-4 h-4"></i> Buat Room Baru
+            <button id="btn-join" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10">
+                <i data-lucide="video" class="w-4 h-4"></i> Gabung / Buat Room
             </button>
-
-            <div class="relative flex py-2 items-center">
-                <div class="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
-                <span class="flex-shrink mx-4 text-zinc-400 dark:text-zinc-600 text-xs font-mono">ATAU</span>
-                <div class="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
-            </div>
-
-            <div class="flex gap-2">
-                <input type="text" id="input-join-room" maxlength="5" placeholder="KODE..." class="w-2/3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-purple-500 text-zinc-800 dark:text-zinc-200 text-center">
-                <button id="btn-join-room" class="w-1/3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold rounded-xl text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition flex items-center justify-center gap-1.5">
-                    Gabung
-                </button>
-            </div>
+            
+            <p class="text-[10px] text-zinc-400 text-center">Siapa saja yang mengetikkan nama room yang sama akan otomatis masuk ke room yang sama.</p>
         </div>
 
         <!-- PANEL CONFERENCE -->
         <div id="panel-conference" class="w-full hidden flex flex-col gap-4 h-full">
             <div id="video-conference-grid" class="grid grid-cols-1 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]">
-                <!-- Video boxes -->
+                <!-- Video Agora Container akan masuk ke sini -->
             </div>
         </div>
 
@@ -101,20 +88,19 @@
         </button>
     </div>
 
-    <footer id="footer-branding" class="p-4 text-center text-[10px] text-zinc-400 dark:text-zinc-600 shrink-0">
-        Camcum Meet &copy; 2026
+    <footer class="p-4 text-center text-[10px] text-zinc-400 dark:text-zinc-600 shrink-0">
+        Camcum Meet Powered by Agora &copy; 2026
     </footer>
 
     <script>
-        // --- SELEKSI BROKER MQTT PUBLIK (Gratis & Tanpa Auth) ---
-        const MQTT_BROKER = "wss://broker.hivemq.com:8000/mqtt";
-        let mqttClient = null;
-        let peer = null;
-        let localStream = null;
-        let myUsername = "User";
-        let currentRoomCode = "";
-        let myPeerId = "";
-        let activeCalls = {};
+        // --- ⚠️ AGORA CREDENTIALS (Wajib Diisi dari console.agora.io) ⚠️ ---
+        // Jika akun Agora Anda menggunakan mode "Testing / No Token", biarkan AGORA_TOKEN berisi null atau "".
+        const AGORA_APP_ID = "GANTI_DENGAN_APP_ID_AGORA_ANDA"; 
+        const AGORA_TOKEN = null; 
+
+        let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        let localTracks = { videoTrack: null, audioTrack: null };
+        let remoteUsers = {};
 
         let isMicOn = true;
         let isCamOn = true;
@@ -123,237 +109,129 @@
         const panelConference = document.getElementById('panel-conference');
         const controlsBar = document.getElementById('conference-controls');
         const roomStatusBar = document.getElementById('room-status-bar');
+        const videoGrid = document.getElementById('video-conference-grid');
 
-        function generateRoomCode() {
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            let code = '';
-            for (let i = 0; i < 5; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-            return code;
-        }
-
-        document.getElementById('btn-create-room').addEventListener('click', () => {
-            if (!validateUsername()) return;
-            currentRoomCode = generateRoomCode();
-            initSession();
-        });
-
-        document.getElementById('btn-join-room').addEventListener('click', () => {
-            if (!validateUsername()) return;
-            const codeInput = document.getElementById('input-join-room').value.trim().toUpperCase();
-            if (codeInput.length !== 5) {
-                alert("Masukkan 5 digit kode Room!");
+        document.getElementById('btn-join').addEventListener('click', async () => {
+            const roomName = document.getElementById('input-room').value.trim().toLowerCase();
+            if (!roomName) {
+                alert("Masukkan nama atau kode room!");
                 return;
             }
-            currentRoomCode = codeInput;
-            initSession();
+
+            if (AGORA_APP_ID === "GANTI_DENGAN_APP_ID_AGORA_ANDA") {
+                alert("PENTING: Silakan masukkan AGORA_APP_ID Anda di dalam tag <script> baris ke-97 agar aplikasi ini bisa berjalan!");
+                return;
+            }
+
+            await joinRoom(roomName);
         });
 
-        function validateUsername() {
-            const name = document.getElementById('input-username').value.trim();
-            if (!name) {
-                alert("Silakan masukkan nama Anda!");
-                return false;
-            }
-            myUsername = name;
-            return true;
-        }
-
-        async function initSession() {
+        async function joinRoom(roomName) {
             try {
-                // 1. Ambil Media Perangkat
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                
-                // Transisi UI
+                // 1. Setup event listener untuk user lain yang bergabung/meninggalkan room
+                client.on("user-published", handleUserPublished);
+                client.on("user-unpublished", handleUserUnpublished);
+
+                // 2. Gabung ke channel Agora (UID di-generate otomatis oleh server jika diisi null)
+                const uid = await client.join(AGORA_APP_ID, roomName, AGORA_TOKEN, null);
+
+                // Ganti Tampilan UI
                 panelLobby.classList.add('hidden');
-                document.getElementById('footer-branding').classList.add('hidden');
                 panelConference.classList.remove('hidden');
                 controlsBar.classList.remove('hidden');
                 controlsBar.classList.add('flex');
                 roomStatusBar.classList.remove('hidden');
-                document.getElementById('display-room-id').innerText = currentRoomCode;
+                document.getElementById('display-room-id').innerText = roomName;
 
-                // 2. Buat ID Acak Unik untuk PeerJS
-                myPeerId = "CC_PEER_" + Math.floor(100000 + Math.random() * 900000);
+                // 3. Buat Track Kamera dan Mikrofon Lokal milik sendiri
+                [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
 
-                // 3. Bangun koneksi PeerJS server
-// 3. Bangun koneksi PeerJS server dengan STUN + TURN Server Gratisan
-peer = new Peer(myPeerId, {
-    host: '0.peerjs.com',
-    port: 443,
-    secure: true,
-    config: { 
-        'iceServers': [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            // Menggunakan open-relay TURN server publik gratis agar bisa menembus Symmetric NAT
-            {
-                urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelay',
-                credential: 'openrelay'
-            },
-            {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelay',
-                credential: 'openrelay'
-            }
-        ],
-        'iceTransportPolicy': 'all'
-    }
-});
+                // 4. Render Video Sendiri ke Layar
+                createVideoContainer(uid, "Anda", true);
+                localTracks.videoTrack.play(`video-${uid}`);
 
-                peer.on('open', (id) => {
-                    createVideoBox(id, myUsername, localStream, true);
-                    initMqttSignaling(); // Jalankan jaringan sinyal penemu teman
-                });
+                // 5. Publish video & audio kita ke server agar dilihat peserta lain
+                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
 
-                // Menangani panggilan video masuk
-                peer.on('call', (call) => {
-                    call.answer(localStream);
-                    call.on('stream', (remoteStream) => {
-                        const senderName = call.metadata?.username || "Peserta";
-                        createVideoBox(call.peer, senderName, remoteStream, false);
-                    });
-                    activeCalls[call.peer] = call;
-                    
-                    call.on('close', () => removeVideoBox(call.peer));
-                });
-
-            } catch (err) {
-                alert("Akses kamera/mikrofon ditolak atau tidak didukung browser ini!");
-                console.error(err);
+            } catch (error) {
+                console.error("Gagal join room:", error);
+                alert("Gagal masuk rapat. Pastikan App ID benar dan izin kamera disetujui.");
             }
         }
 
-        // --- MQTT SIGNALING & BROADCAST PROTOCOL ---
-        function initMqttSignaling() {
-            mqttClient = mqtt.connect(MQTT_BROKER);
-            const topicName = `camcum/meet/room/${currentRoomCode}`;
+        // --- HANDLER SAAT USER LAIN JOIN DAN PUBLISH VIDEO ---
+        async function handleUserPublished(user, mediaType) {
+            const id = user.uid;
+            remoteUsers[id] = user;
+            
+            // Subscribe ke data stream user tersebut dari server
+            await client.subscribe(user, mediaType);
 
-            mqttClient.on('connect', () => {
-                // Subscribe ke ruang obrolan kode room yang sama
-                mqttClient.subscribe(topicName, (err) => {
-                    if (!err) {
-                        // Siarkan kehadiran kita ke semua orang yang sudah ada di room tersebut
-                        broadcastPresence("JOIN");
-                    }
-                });
-            });
+            if (mediaType === "video") {
+                createVideoContainer(id, `Peserta ${id}`);
+                user.videoTrack.play(`video-${id}`);
+            }
 
-            mqttClient.on('message', (topic, message) => {
-                try {
-                    const data = JSON.parse(message.toString());
-                    
-                    // Abaikan pesan jika itu berasal dari diri sendiri
-                    if (data.peerId === myPeerId) return;
-
-                    if (data.action === "JOIN") {
-                        // Seseorang baru bergabung! Kirim sinyal balik agar dia tahu kita ada di sini
-                        broadcastPresence("ALIVE");
-
-                        // Langsung hubungi dia via WebRTC Call jika belum terhubung
-                        callRemotePeer(data.peerId, data.username);
-                    } 
-                    else if (data.action === "ALIVE") {
-                        // Respon balik dari user lama yang sudah stand-by di room
-                        callRemotePeer(data.peerId, data.username);
-                    } 
-                    else if (data.action === "LEAVE") {
-                        // User menginfokan keluar dari room
-                        removeVideoBox(data.peerId);
-                        if (activeCalls[data.peerId]) {
-                            activeCalls[data.peerId].close();
-                            delete activeCalls[data.peerId];
-                        }
-                    }
-                } catch (e) {
-                    console.error("Gagal membaca payload sinyal:", e);
-                }
-            });
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
         }
 
-        function broadcastPresence(actionType) {
-            if (!mqttClient) return;
-            const topicName = `camcum/meet/room/${currentRoomCode}`;
-            const payload = {
-                action: actionType,
-                peerId: myPeerId,
-                username: myUsername
-            };
-            mqttClient.publish(topicName, JSON.stringify(payload));
+        // --- HANDLER SAAT USER LAIN LEAVE ATAU OFF-CAM ---
+        function handleUserUnpublished(user, mediaType) {
+            if (mediaType === "video") {
+                const id = user.uid;
+                const box = document.getElementById(`box-${id}`);
+                if (box) box.remove();
+                delete remoteUsers[id];
+                reorganizeGridTracks();
+            }
         }
 
-        function callRemotePeer(targetPeerId, targetName) {
-            if (activeCalls[targetPeerId]) return; // Cegah double-calling berkali-kali
+        // --- UI RENDER VIDEO GRID ---
+        function createVideoContainer(uid, labelName, isLocal = false) {
+            if (document.getElementById(`box-${uid}`)) return;
 
-            console.log(`Menghubungi: ${targetName} (${targetPeerId})`);
-            const call = peer.call(targetPeerId, localStream, {
-                metadata: { username: myUsername }
-            });
-
-            call.on('stream', (remoteStream) => {
-                createVideoBox(targetPeerId, targetName, remoteStream, false);
-            });
-
-            activeCalls[targetPeerId] = call;
-        }
-
-        // --- TRACKS & MEDIA BOX GRID ---
-        function createVideoBox(peerId, username, stream, isLocal) {
-            if (document.getElementById(`box-${peerId}`)) return;
-
-            const grid = document.getElementById('video-conference-grid');
             const box = document.createElement('div');
-            box.id = `box-${peerId}`;
-            box.className = "bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-lg relative flex items-center justify-center aspect-video";
-
+            box.id = `box-${uid}`;
+            box.className = "bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-lg relative aspect-video flex items-center justify-center";
+            
+            // Div internal khusus target render SDK Agora
             box.innerHTML = `
-                <video id="vid-${peerId}" autoplay playsinline ${isLocal ? 'muted' : ''} class="w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}"></video>
-                <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl text-xs font-medium border border-white/10 text-white flex items-center gap-1.5">
+                <div id="video-${uid}" class="w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}"></div>
+                <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl text-xs font-medium border border-white/10 text-white flex items-center gap-1.5 z-10">
                     <span class="w-1.5 h-1.5 rounded-full ${isLocal ? 'bg-indigo-500' : 'bg-emerald-500'}"></span>
-                    ${username} ${isLocal ? '(Anda)' : ''}
+                    ${labelName}
                 </div>
             `;
 
-            grid.appendChild(box);
-            const videoEl = document.getElementById(`vid-${peerId}`);
-            videoEl.srcObject = stream;
-            videoEl.play().catch(err => console.log("Menunggu play gesture: ", err));
-            
-            reorganizeGridTracks();
-        }
-
-        function removeVideoBox(peerId) {
-            const element = document.getElementById(`box-${peerId}`);
-            if (element) element.remove();
+            videoGrid.appendChild(box);
             reorganizeGridTracks();
         }
 
         function reorganizeGridTracks() {
-            const grid = document.getElementById('video-conference-grid');
-            const totalItems = grid.children.length;
-
+            const totalItems = videoGrid.children.length;
             if (totalItems <= 1) {
-                grid.className = "grid grid-cols-1 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
+                videoGrid.className = "grid grid-cols-1 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
             } else if (totalItems === 2) {
-                grid.className = "grid grid-cols-1 md:grid-cols-2 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
+                videoGrid.className = "grid grid-cols-1 md:grid-cols-2 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
             } else if (totalItems <= 4) {
-                grid.className = "grid grid-cols-2 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
+                videoGrid.className = "grid grid-cols-2 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
             } else {
-                grid.className = "grid grid-cols-2 lg:grid-cols-3 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
+                videoGrid.className = "grid grid-cols-2 lg:grid-cols-3 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
             }
         }
 
-        // --- BUTTON HANDLER MANAGEMENT ---
-        document.getElementById('btn-toggle-mic').addEventListener('click', () => {
+        // --- CONTROLS ACTION HANDLERS ---
+        document.getElementById('btn-toggle-mic').addEventListener('click', async () => {
             isMicOn = !isMicOn;
-            localStream.getAudioTracks().forEach(track => track.enabled = isMicOn);
+            await localTracks.audioTrack.setEnabled(isMicOn);
             updateButtonState('btn-toggle-mic', 'icon-mic', isMicOn, 'mic', 'mic-off');
         });
 
-        document.getElementById('btn-toggle-cam').addEventListener('click', () => {
+        document.getElementById('btn-toggle-cam').addEventListener('click', async () => {
             isCamOn = !isCamOn;
-            localStream.getVideoTracks().forEach(track => track.enabled = isCamOn);
+            await localTracks.videoTrack.setEnabled(isCamOn);
             updateButtonState('btn-toggle-cam', 'icon-cam', isCamOn, 'video', 'video-off');
         });
 
@@ -370,14 +248,16 @@ peer = new Peer(myPeerId, {
             lucide.createIcons();
         }
 
-        document.getElementById('btn-leave-room').addEventListener('click', () => {
-            if (confirm("Apakah Anda yakin ingin keluar dari rapat?")) {
-                broadcastPresence("LEAVE");
-                setTimeout(() => {
-                    if (peer) peer.destroy();
-                    if (mqttClient) mqttClient.end();
-                    window.location.reload();
-                }, 300);
+        document.getElementById('btn-leave-room').addEventListener('click', async () => {
+            if (confirm("Keluar dari video call?")) {
+                for (let trackName in localTracks) {
+                    if (localTracks[trackName]) {
+                        localTracks[trackName].stop();
+                        localTracks[trackName].close();
+                    }
+                }
+                await client.leave();
+                window.location.reload();
             }
         });
 
