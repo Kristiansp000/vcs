@@ -176,12 +176,31 @@
                 myPeerId = "CC_PEER_" + Math.floor(100000 + Math.random() * 900000);
 
                 // 3. Bangun koneksi PeerJS server
-                peer = new Peer(myPeerId, {
-                    host: '0.peerjs.com',
-                    port: 443,
-                    secure: true,
-                    config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] }
-                });
+// 3. Bangun koneksi PeerJS server dengan STUN + TURN Server Gratisan
+peer = new Peer(myPeerId, {
+    host: '0.peerjs.com',
+    port: 443,
+    secure: true,
+    config: { 
+        'iceServers': [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            // Menggunakan open-relay TURN server publik gratis agar bisa menembus Symmetric NAT
+            {
+                urls: 'turn:openrelay.metered.ca:443',
+                username: 'openrelay',
+                credential: 'openrelay'
+            },
+            {
+                urls: 'turn:openrelay.metered.ca:80',
+                username: 'openrelay',
+                credential: 'openrelay'
+            }
+        ],
+        'iceTransportPolicy': 'all'
+    }
+});
 
                 peer.on('open', (id) => {
                     createVideoBox(id, myUsername, localStream, true);
