@@ -3,28 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Camcum Meet - Rock Solid Video Call</title>
+    <title>Camcum Meet - Native Mesh WebRTC</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: { zinc: { 950: '#09090b' } }
-                }
-            }
+            theme: { extend: { colors: { zinc: { 950: '#09090b' } } } }
         }
     </script>
-    <!-- Agora Web SDK & Lucide Icons -->
-    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.22.0.js"></script>
+    <!-- Socket.io & SimplePeer (WebRTC Wrapper Mandiri) -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
-        .glass {
-            background: rgba(24, 24, 27, 0.65);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-        }
+        .glass { background: rgba(24, 24, 27, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
     </style>
 </head>
 <body class="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 min-h-screen flex flex-col justify-between font-sans antialiased transition-colors duration-200">
@@ -37,7 +30,7 @@
                 <span class="text-base font-bold tracking-tight bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">Camcum Meet</span>
             </div>
             <div id="room-status-bar" class="hidden flex items-center gap-2 text-xs bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 font-mono">
-                <span>Room Channel: <b id="display-room-id" class="text-indigo-400 select-all">---</b></span>
+                <span>Room: <b id="display-room-id" class="text-indigo-400 select-all">---</b></span>
             </div>
         </div>
     </header>
@@ -46,29 +39,41 @@
     <main class="flex-1 w-full max-w-7xl mx-auto p-4 flex flex-col justify-center items-center">
         
         <!-- PANEL LOBBY -->
-        <div id="panel-lobby" class="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col gap-5">
+        <div id="panel-lobby" class="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col gap-6">
             <div class="text-center">
-                <h2 class="text-xl font-bold tracking-tight">Masuk Rapat Video</h2>
-                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Bekerja 100% di semua jaringan seluler & Wi-Fi.</p>
+                <h2 class="text-xl font-bold tracking-tight">Mulai Rapat Video</h2>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Sinyal terarah via Node.js Socket server mandiri.</p>
             </div>
 
-            <!-- Input Room Channel -->
             <div>
-                <label class="text-[11px] text-zinc-400 block mb-1 font-semibold uppercase tracking-wider">Nama / Kode Room (Bebas)</label>
-                <input type="text" id="input-room" placeholder="Contoh: rapat-it atau 12345" class="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 text-zinc-800 dark:text-zinc-200 font-mono text-center tracking-wide">
+                <label class="text-[11px] text-zinc-400 block mb-1 font-semibold uppercase tracking-wider">Nama Anda</label>
+                <input type="text" id="input-username" placeholder="Masukkan nama panggilan..." class="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 text-zinc-800 dark:text-zinc-200 font-medium">
             </div>
 
-            <button id="btn-join" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10">
-                <i data-lucide="video" class="w-4 h-4"></i> Gabung / Buat Room
+            <div class="border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
+
+            <button id="btn-create-room" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> Buat Room Baru
             </button>
-            
-            <p class="text-[10px] text-zinc-400 text-center">Siapa saja yang mengetikkan nama room yang sama akan otomatis masuk ke room yang sama.</p>
+
+            <div class="relative flex py-2 items-center">
+                <div class="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
+                <span class="flex-shrink mx-4 text-zinc-400 dark:text-zinc-600 text-xs font-mono">ATAU</span>
+                <div class="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
+            </div>
+
+            <div class="flex gap-2">
+                <input type="text" id="input-join-room" maxlength="5" placeholder="KODE..." class="w-2/3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-purple-500 text-zinc-800 dark:text-zinc-200 text-center">
+                <button id="btn-join-room" class="w-1/3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold rounded-xl text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition flex items-center justify-center gap-1.5">
+                    Gabung
+                </button>
+            </div>
         </div>
 
         <!-- PANEL CONFERENCE -->
         <div id="panel-conference" class="w-full hidden flex flex-col gap-4 h-full">
             <div id="video-conference-grid" class="grid grid-cols-1 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]">
-                <!-- Video Agora Container akan masuk ke sini -->
+                <!-- Video di-inject disini -->
             </div>
         </div>
 
@@ -88,19 +93,16 @@
         </button>
     </div>
 
-    <footer class="p-4 text-center text-[10px] text-zinc-400 dark:text-zinc-600 shrink-0">
-        Camcum Meet Powered by Agora &copy; 2026
+    <footer id="footer-branding" class="p-4 text-center text-[10px] text-zinc-400 dark:text-zinc-600 shrink-0">
+        Camcum Meet Mandiri &copy; 2026
     </footer>
 
     <script>
-        // --- ⚠️ AGORA CREDENTIALS (Wajib Diisi dari console.agora.io) ⚠️ ---
-        // Jika akun Agora Anda menggunakan mode "Testing / No Token", biarkan AGORA_TOKEN berisi null atau "".
-        const AGORA_APP_ID = "GANTI_DENGAN_APP_ID_AGORA_ANDA"; 
-        const AGORA_TOKEN = null; 
-
-        let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-        let localTracks = { videoTrack: null, audioTrack: null };
-        let remoteUsers = {};
+        let socket = null;
+        let localStream = null;
+        let myUsername = "User";
+        let currentRoomCode = "";
+        let peers = {}; // Menyimpan instance objek SimplePeer aktif
 
         let isMicOn = true;
         let isCamOn = true;
@@ -111,101 +113,172 @@
         const roomStatusBar = document.getElementById('room-status-bar');
         const videoGrid = document.getElementById('video-conference-grid');
 
-        document.getElementById('btn-join').addEventListener('click', async () => {
-            const roomName = document.getElementById('input-room').value.trim().toLowerCase();
-            if (!roomName) {
-                alert("Masukkan nama atau kode room!");
-                return;
-            }
+        // ICE Servers Konfigurasi Agresif Tembus NAT Pemblokir Jaringan
+        const iceConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' }
+            ]
+        };
 
-            if (AGORA_APP_ID === "GANTI_DENGAN_APP_ID_AGORA_ANDA") {
-                alert("PENTING: Silakan masukkan AGORA_APP_ID Anda di dalam tag <script> baris ke-97 agar aplikasi ini bisa berjalan!");
-                return;
-            }
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 5; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+            return code;
+        }
 
-            await joinRoom(roomName);
+        document.getElementById('btn-create-room').addEventListener('click', () => {
+            if (!validateUsername()) return;
+            currentRoomCode = generateRoomCode();
+            initSession();
         });
 
-        async function joinRoom(roomName) {
+        document.getElementById('btn-join-room').addEventListener('click', () => {
+            if (!validateUsername()) return;
+            const codeInput = document.getElementById('input-join-room').value.trim().toUpperCase();
+            if (codeInput.length !== 5) {
+                alert("Masukkan 5 digit kode Room!");
+                return;
+            }
+            currentRoomCode = codeInput;
+            initSession();
+        });
+
+        function validateUsername() {
+            const name = document.getElementById('input-username').value.trim();
+            if (!name) { alert("Silakan masukkan nama Anda!"); return false; }
+            myUsername = name;
+            return true;
+        }
+
+        async function initSession() {
             try {
-                // 1. Setup event listener untuk user lain yang bergabung/meninggalkan room
-                client.on("user-published", handleUserPublished);
-                client.on("user-unpublished", handleUserUnpublished);
-
-                // 2. Gabung ke channel Agora (UID di-generate otomatis oleh server jika diisi null)
-                const uid = await client.join(AGORA_APP_ID, roomName, AGORA_TOKEN, null);
-
-                // Ganti Tampilan UI
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                
                 panelLobby.classList.add('hidden');
+                document.getElementById('footer-branding').classList.add('hidden');
                 panelConference.classList.remove('hidden');
                 controlsBar.classList.remove('hidden');
                 controlsBar.classList.add('flex');
                 roomStatusBar.classList.remove('hidden');
-                document.getElementById('display-room-id').innerText = roomName;
+                document.getElementById('display-room-id').innerText = currentRoomCode;
 
-                // 3. Buat Track Kamera dan Mikrofon Lokal milik sendiri
-                [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+                createVideoBox('local-user', myUsername, localStream, true);
 
-                // 4. Render Video Sendiri ke Layar
-                createVideoContainer(uid, "Anda", true);
-                localTracks.videoTrack.play(`video-${uid}`);
+                // Hubungkan Socket.io langsung ke domain/server asal file ini disajikan
+                socket = io();
 
-                // 5. Publish video & audio kita ke server agar dilihat peserta lain
-                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+                // Beritahu server kita bergabung ke room tertentu
+                socket.emit('join-room', { roomCode: currentRoomCode, username: myUsername });
 
-            } catch (error) {
-                console.error("Gagal join room:", error);
-                alert("Gagal masuk rapat. Pastikan App ID benar dan izin kamera disetujui.");
+                // Alur A: Jika di room sudah ada orang, buat penawaran (Offer Peer) ke mereka masing-masing
+                socket.on('all-users', users => {
+                    users.forEach(user => {
+                        const peer = createPeer(user.id, socket.id, localStream);
+                        peers[user.id] = { peer, username: user.username };
+                    });
+                });
+
+                // Alur B: Menerima penawaran (Offer) dari user baru yang baru masuk belakangan
+                socket.on('user-joined-signal', payload => {
+                    const peer = addPeer(payload.signal, payload.callerId, localStream);
+                    peers[payload.callerId] = { peer, username: payload.username };
+                });
+
+                // Alur C: Menerima balasan jabat tangan (Answer) WebRTC kembali
+                socket.on('receiving-returned-signal', payload => {
+                    if (peers[payload.id]) {
+                        peers[payload.id].peer.signal(payload.signal);
+                    }
+                });
+
+                // Alur D: Anggota room keluar
+                socket.on('user-left', id => {
+                    if (peers[id]) {
+                        peers[id].peer.destroy();
+                        delete peers[id];
+                    }
+                    removeVideoBox(id);
+                });
+
+            } catch (err) {
+                alert("Akses kamera/mikrofon ditolak browser atau lingkungan tidak mendukung HTTPS/Localhost!");
+                console.error(err);
             }
         }
 
-        // --- HANDLER SAAT USER LAIN JOIN DAN PUBLISH VIDEO ---
-        async function handleUserPublished(user, mediaType) {
-            const id = user.uid;
-            remoteUsers[id] = user;
-            
-            // Subscribe ke data stream user tersebut dari server
-            await client.subscribe(user, mediaType);
+        // Fungsi membuat peer caller (Inisiator panggilan)
+        function createPeer(userToSignal, callerId, stream) {
+            const peer = new SimplePeer({
+                initiator: true,
+                trickle: false,
+                config: iceConfig,
+                stream: stream
+            });
 
-            if (mediaType === "video") {
-                createVideoContainer(id, `Peserta ${id}`);
-                user.videoTrack.play(`video-${id}`);
-            }
+            peer.on('signal', signal => {
+                socket.emit('sending-signal', { userToSignal, callerId, signal });
+            });
 
-            if (mediaType === "audio") {
-                user.audioTrack.play();
-            }
+            peer.on('stream', remoteStream => {
+                const name = peers[userToSignal] ? peers[userToSignal].username : "Peserta";
+                createVideoBox(userToSignal, name, remoteStream, false);
+            });
+
+            return peer;
         }
 
-        // --- HANDLER SAAT USER LAIN LEAVE ATAU OFF-CAM ---
-        function handleUserUnpublished(user, mediaType) {
-            if (mediaType === "video") {
-                const id = user.uid;
-                const box = document.getElementById(`box-${id}`);
-                if (box) box.remove();
-                delete remoteUsers[id];
-                reorganizeGridTracks();
-            }
+        // Fungsi membalas peer incoming (Penerima panggilan)
+        function addPeer(incomingSignal, callerId, stream) {
+            const peer = new SimplePeer({
+                initiator: false,
+                trickle: false,
+                config: iceConfig,
+                stream: stream
+            });
+
+            peer.on('signal', signal => {
+                socket.emit('returning-signal', { signal, callerId });
+            });
+
+            peer.on('stream', remoteStream => {
+                const name = peers[callerId] ? peers[callerId].username : "Peserta";
+                createVideoBox(callerId, name, remoteStream, false);
+            });
+
+            peer.signal(incomingSignal);
+            return peer;
         }
 
-        // --- UI RENDER VIDEO GRID ---
-        function createVideoContainer(uid, labelName, isLocal = false) {
-            if (document.getElementById(`box-${uid}`)) return;
+        // --- MANAJEMEN GRID VIEW & HARDWARE ---
+        function createVideoBox(id, username, stream, isLocal) {
+            if (document.getElementById(`box-${id}`)) return;
 
             const box = document.createElement('div');
-            box.id = `box-${uid}`;
-            box.className = "bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-lg relative aspect-video flex items-center justify-center";
-            
-            // Div internal khusus target render SDK Agora
+            box.id = `box-${id}`;
+            box.className = "bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-lg relative flex items-center justify-center aspect-video";
+
             box.innerHTML = `
-                <div id="video-${uid}" class="w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}"></div>
-                <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl text-xs font-medium border border-white/10 text-white flex items-center gap-1.5 z-10">
+                <video id="vid-${id}" autoplay playsinline ${isLocal ? 'muted' : ''} class="w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}"></video>
+                <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl text-xs font-medium border border-white/10 text-white flex items-center gap-1.5">
                     <span class="w-1.5 h-1.5 rounded-full ${isLocal ? 'bg-indigo-500' : 'bg-emerald-500'}"></span>
-                    ${labelName}
+                    ${username} ${isLocal ? '(Anda)' : ''}
                 </div>
             `;
 
             videoGrid.appendChild(box);
+            const videoEl = document.getElementById(`vid-${id}`);
+            videoEl.srcObject = stream;
+            videoEl.play().catch(err => console.log("Autoplay ditangguhkan:", err));
+            
+            reorganizeGridTracks();
+        }
+
+        function removeVideoBox(id) {
+            const element = document.getElementById(`box-${id}`);
+            if (element) element.remove();
             reorganizeGridTracks();
         }
 
@@ -222,16 +295,15 @@
             }
         }
 
-        // --- CONTROLS ACTION HANDLERS ---
-        document.getElementById('btn-toggle-mic').addEventListener('click', async () => {
+        document.getElementById('btn-toggle-mic').addEventListener('click', () => {
             isMicOn = !isMicOn;
-            await localTracks.audioTrack.setEnabled(isMicOn);
+            localStream.getAudioTracks().forEach(track => track.enabled = isMicOn);
             updateButtonState('btn-toggle-mic', 'icon-mic', isMicOn, 'mic', 'mic-off');
         });
 
-        document.getElementById('btn-toggle-cam').addEventListener('click', async () => {
+        document.getElementById('btn-toggle-cam').addEventListener('click', () => {
             isCamOn = !isCamOn;
-            await localTracks.videoTrack.setEnabled(isCamOn);
+            localStream.getVideoTracks().forEach(track => track.enabled = isCamOn);
             updateButtonState('btn-toggle-cam', 'icon-cam', isCamOn, 'video', 'video-off');
         });
 
@@ -248,15 +320,8 @@
             lucide.createIcons();
         }
 
-        document.getElementById('btn-leave-room').addEventListener('click', async () => {
-            if (confirm("Keluar dari video call?")) {
-                for (let trackName in localTracks) {
-                    if (localTracks[trackName]) {
-                        localTracks[trackName].stop();
-                        localTracks[trackName].close();
-                    }
-                }
-                await client.leave();
+        document.getElementById('btn-leave-room').addEventListener('click', () => {
+            if (confirm("Apakah Anda yakin ingin keluar dari rapat?")) {
                 window.location.reload();
             }
         });
