@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Camcum Meet - Premium Video Conference</title>
+    <title>Camcum Meet - Real-time Full Mesh</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -15,8 +15,14 @@
             }
         }
     </script>
+    <!-- PeerJS & Lucide Icons -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase App & Database SDKs (Signaling Channel) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
     <style>
         .glass {
             background: rgba(24, 24, 27, 0.65);
@@ -43,7 +49,7 @@
     <!-- Main Content Grid -->
     <main class="flex-1 w-full max-w-7xl mx-auto p-4 flex flex-col justify-center items-center">
         
-        <!-- PANEL LOBBY (CREATE / JOIN) -->
+        <!-- PANEL LOBBY -->
         <div id="panel-lobby" class="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col gap-6">
             <div class="text-center">
                 <h2 class="text-xl font-bold tracking-tight">Mulai Rapat Video</h2>
@@ -71,24 +77,23 @@
 
             <!-- Opsi 2: Gabung Room -->
             <div class="flex gap-2">
-                <input type="text" id="input-join-room" maxlength="5" placeholder="Kode Room 5 Digit..." class="w-2/3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-purple-500 text-zinc-800 dark:text-zinc-200 text-center">
+                <input type="text" id="input-join-room" maxlength="5" placeholder="KODE..." class="w-2/3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-purple-500 text-zinc-800 dark:text-zinc-200 text-center">
                 <button id="btn-join-room" class="w-1/3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold rounded-xl text-sm hover:bg-zinc-800 dark:hover:bg-zinc-200 transition flex items-center justify-center gap-1.5">
                     Gabung
                 </button>
             </div>
         </div>
 
-        <!-- PANEL CONFERENCE: GRID VIDEO -->
+        <!-- PANEL CONFERENCE -->
         <div id="panel-conference" class="w-full hidden flex flex-col gap-4 h-full">
-            <!-- Grid Dynamic Layout -->
-            <div id="video-conference-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]">
-                <!-- Video boxes akan di-inject secara dinamis di sini -->
+            <div id="video-conference-grid" class="grid grid-cols-1 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]">
+                <!-- Video di-inject disini -->
             </div>
         </div>
 
     </main>
 
-    <!-- CONTROL CONTROLLER (GOOGLE MEET STYLE BAR) -->
+    <!-- CONTROLS BAR -->
     <div id="conference-controls" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 glass border border-zinc-200 dark:border-zinc-800 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 z-50">
         <button id="btn-toggle-mic" class="p-3 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-xl transition text-zinc-800 dark:text-zinc-200">
             <i id="icon-mic" data-lucide="mic" class="w-5 h-5"></i>
@@ -102,19 +107,30 @@
         </button>
     </div>
 
-    <!-- Footer -->
     <footer id="footer-branding" class="p-4 text-center text-[10px] text-zinc-400 dark:text-zinc-600 shrink-0">
         Camcum Meet &copy; 2026
     </footer>
 
     <script>
-        const ROOM_PREFIX = "CAMCUM_MEET_";
+        // --- CONFIG FIREBASE (Gunakan Database Publik/Test Mode) ---
+        // Ganti dengan konfigurasi Firebase project Anda sendiri jika diperlukan.
+        const firebaseConfig = {
+            databaseURL: "https://camcum-meet-default-rtdb.asia-southeast1.firebasedatabase.app/" 
+        };
+        
+        // Cek jika firebaseConfig valid sebelum inisialisasi
+        if(firebaseConfig.databaseURL.includes("default-rtdb")) {
+            console.warn("Menggunakan demo signaling URL database. Untuk production, gantilah dengan Firebase Config Anda sendiri.");
+        }
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
         let peer = null;
         let localStream = null;
         let myUsername = "User";
         let currentRoomCode = "";
-        let connections = {}; // Menyimpan data koneksi teks (data channels)
-        let activeCalls = {};  // Menyimpan data panggilan media (stream calls)
+        let myPeerId = "";
+        let activeCalls = {};
 
         let isMicOn = true;
         let isCamOn = true;
@@ -131,11 +147,10 @@
             return code;
         }
 
-        // --- HANDLER TOMBOL UTAMA ---
         document.getElementById('btn-create-room').addEventListener('click', () => {
             if (!validateUsername()) return;
             currentRoomCode = generateRoomCode();
-            initSession(true);
+            initSession();
         });
 
         document.getElementById('btn-join-room').addEventListener('click', () => {
@@ -146,120 +161,127 @@
                 return;
             }
             currentRoomCode = codeInput;
-            initSession(false);
+            initSession();
         });
 
         function validateUsername() {
             const name = document.getElementById('input-username').value.trim();
             if (!name) {
-                alert("Silakan masukkan nama Anda terlebih dahulu!");
+                alert("Silakan masukkan nama Anda!");
                 return false;
             }
             myUsername = name;
             return true;
         }
 
-        // --- INISIALISASI WEB RTC PER-USER ---
-        async function initSession(isHost) {
+        async function initSession() {
             try {
-                // Ambil permission hardware di awal
+                // 1. Dapatkan Media Stream
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 
+                // Switch UI dari Lobby ke Rapat
                 panelLobby.classList.add('hidden');
                 document.getElementById('footer-branding').classList.add('hidden');
                 panelConference.classList.remove('hidden');
-                controlsBar.classList.remove('flex');
                 controlsBar.classList.remove('hidden');
+                controlsBar.classList.add('flex');
                 roomStatusBar.classList.remove('hidden');
                 document.getElementById('display-room-id').innerText = currentRoomCode;
 
-                // Format Peer ID: PREFIX + ROOMCODE + USERNAME_RANDOM
-                const myPeerId = ROOM_PREFIX + currentRoomCode + "_" + myUsername + "_" + Math.floor(Math.random() * 1000);
+                // 2. Generate Peer ID Unik
+                myPeerId = "CC_" + currentRoomCode + "_" + Math.floor(1000 + Math.random() * 9000);
 
-                // Koneksi ke Cloud Server Broker PeerJS (HTTPS & Vercel Friendly)
+                // 3. Init Peer Server Connection
                 peer = new Peer(myPeerId, {
                     host: '0.peerjs.com',
                     port: 443,
                     secure: true,
-                    debug: 1,
-                    config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+                    config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] }
                 });
 
                 peer.on('open', (id) => {
-                    // Tampilkan local preview video sendiri
                     createVideoBox(id, myUsername, localStream, true);
-                    
-                    if (!isHost) {
-                        // Jika joiner, cari peer lain yang ada di room yang sama melalui listing/sinyal manual mesh
-                        discoverAndConnectToPeers();
-                    }
+                    registerAndListenSignaling();
                 });
 
-                // Menangani panggilan Media masuk (Audio/Video Stream)
+                // Menangani panggilan masuk dari peserta lain
                 peer.on('call', (call) => {
                     call.answer(localStream);
                     call.on('stream', (remoteStream) => {
-                        const senderName = parseUsernameFromPeerId(call.peer);
+                        const senderName = call.metadata?.username || "Peserta";
                         createVideoBox(call.peer, senderName, remoteStream, false);
                     });
                     activeCalls[call.peer] = call;
-                    
-                    call.on('close', () => removeVideoBox(call.peer));
-                    call.on('error', () => removeVideoBox(call.peer));
-                });
 
-                // Menangani data channel (Untuk sinyal perkenalan nama/mesh network)
-                peer.on('connection', (conn) => {
-                    conn.on('data', (data) => {
-                        if (data.type === 'HELLO') {
-                            // Secara otomatis panggil user baru tersebut biar saling bertukar stream (Full Mesh)
-                            if (!activeCalls[conn.peer]) {
-                                const call = peer.call(conn.peer, localStream);
-                                call.on('stream', (remoteStream) => {
-                                    createVideoBox(conn.peer, data.username, remoteStream, false);
-                                });
-                                activeCalls[conn.peer] = call;
-                            }
-                        }
-                    });
+                    call.on('close', () => removeVideoBox(call.peer));
                 });
 
             } catch (err) {
-                alert("Gagal mengakses Kamera/Mikrofon. Mohon izinkan akses perangkat.");
+                alert("Akses kamera/mikrofon ditolak atau tidak ditemukan!");
                 console.error(err);
             }
         }
 
-        // --- DISCOVERY MESH PROTOCOL ---
-        function discoverAndConnectToPeers() {
-            // Karena server broker cloud tidak menyediakan API list room secara publik demi keamanan,
-            // Kita memanfaatkan mekanisme brute-probing/sinyal mesh ID di room target via inter-koneksi data channel.
-            // Broker peerjs otomatis meneruskan sinyal request handshake jika ada user online dengan pattern room yang sama.
-            
-            // Mengirim request sapaan ke room via pencarian aktif list internal web-app peer
-            // Untuk arsitektur production skala besar, direkomendasikan dikombinasikan dengan Socket.io / Firebase sebagai room master signaling.
-            // Namun script vanilla mesh di bawah ini bekerja langsung via data channel peer discovery logic.
+        // --- CORE SIGNALING & DISCOVERY HANDSHAKE ---
+        function registerAndListenSignaling() {
+            const roomRef = db.ref(`rooms/${currentRoomCode}`);
+            const myUserRef = roomRef.child(myPeerId);
+
+            // Daftarkan identitas diri ke Firebase Room agar dibaca user lain
+            myUserRef.set({
+                peerId: myPeerId,
+                username: myUsername,
+                joinedAt: firebase.database.ServerValue.TIMESTAMP
+            });
+
+            // Otomatis hapus data dari database jika user disconnect / close tab browser
+            myUserRef.onDisconnect().remove();
+
+            // Dengarkan jika ada user baru masuk atau terdaftar di room ini
+            roomRef.on('child_added', (snapshot) => {
+                const user = snapshot.val();
+                
+                // Jika terdeteksi ada user lain yang berumur ID lebih baru dari kita, hubungi dia!
+                if (user && user.peerId !== myPeerId && !activeCalls[user.peerId]) {
+                    console.log(`Menghubungi peer baru: ${user.username} (${user.peerId})`);
+                    
+                    // Lakukan panggilan media dengan menyematkan metadata nama kita
+                    const call = peer.call(user.peerId, localStream, {
+                        metadata: { username: myUsername }
+                    });
+
+                    call.on('stream', (remoteStream) => {
+                        createVideoBox(user.peerId, user.username, remoteStream, false);
+                    });
+                    
+                    activeCalls[user.peerId] = call;
+                }
+            });
+
+            // Dengarkan jika ada user yang keluar dari room database
+            roomRef.on('child_removed', (snapshot) => {
+                const removedUser = snapshot.val();
+                if (removedUser) {
+                    removeVideoBox(removedUser.peerId);
+                    if (activeCalls[removedUser.peerId]) {
+                        activeCalls[removedUser.peerId].close();
+                        delete activeCalls[removedUser.peerId];
+                    }
+                }
+            });
         }
 
-        // Interseptor parsing nama dari ID unik string
-        function parseUsernameFromPeerId(peerId) {
-            try {
-                const parts = peerId.split("_");
-                return parts[2] || "Participant";
-            } catch { return "Participant"; }
-        }
-
-        // --- MANAJEMEN UI VIDEO GRID ---
+        // --- INTERFACE & LAYOUT MANAGEMENT ---
         function createVideoBox(peerId, username, stream, isLocal) {
             if (document.getElementById(`box-${peerId}`)) return;
 
             const grid = document.getElementById('video-conference-grid');
             const box = document.createElement('div');
             box.id = `box-${peerId}`;
-            box.className = "bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-lg relative flex items-center justify-center aspect-video sm:aspect-auto";
+            box.className = "bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-lg relative flex items-center justify-center aspect-video";
 
             box.innerHTML = `
-                <video id="vid-${peerId}" autoplay playsinline ${isLocal ? 'muted' : ''} class="w-full h-full object-cover scale-x-[-1]"></video>
+                <video id="vid-${peerId}" autoplay playsinline ${isLocal ? 'muted' : ''} class="w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}"></video>
                 <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl text-xs font-medium border border-white/10 text-white flex items-center gap-1.5">
                     <span class="w-1.5 h-1.5 rounded-full ${isLocal ? 'bg-indigo-500' : 'bg-emerald-500'}"></span>
                     ${username} ${isLocal ? '(Anda)' : ''}
@@ -269,9 +291,7 @@
             grid.appendChild(box);
             const videoEl = document.getElementById(`vid-${peerId}`);
             videoEl.srcObject = stream;
-            
-            // Bypass autoplay policy mobile browser
-            videoEl.play().catch(() => console.log("Menunggu interaksi user untuk play video."));
+            videoEl.play().catch(err => console.log("Autoplay ditangguhkan:", err));
             
             reorganizeGridTracks();
         }
@@ -289,7 +309,7 @@
             if (totalItems <= 1) {
                 grid.className = "grid grid-cols-1 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
             } else if (totalItems === 2) {
-                grid.className = "grid grid-cols-1 sm:grid-cols-2 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
+                grid.className = "grid grid-cols-1 md:grid-cols-2 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
             } else if (totalItems <= 4) {
                 grid.className = "grid grid-cols-2 gap-4 w-full auto-rows-fr flex-1 min-h-[65vh]";
             } else {
@@ -297,51 +317,43 @@
             }
         }
 
-        // --- SISTEM KONTROL PERANGKAT (MUTE & CAMERA OFF) ---
+        // --- CONTROLS HARWARE TRACKS ---
         document.getElementById('btn-toggle-mic').addEventListener('click', () => {
             isMicOn = !isMicOn;
             localStream.getAudioTracks().forEach(track => track.enabled = isMicOn);
-            
-            const btn = document.getElementById('btn-toggle-mic');
-            const icon = document.getElementById('icon-mic');
-            
-            if (isMicOn) {
-                btn.className = "p-3 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-xl transition text-zinc-800 dark:text-zinc-200";
-                icon.setAttribute('data-lucide', 'mic');
-            } else {
-                btn.className = "p-3 bg-red-600 hover:bg-red-700 text-white rounded-xl transition";
-                icon.setAttribute('data-lucide', 'mic-off');
-            }
-            lucide.createIcons();
+            updateButtonState('btn-toggle-mic', 'icon-mic', isMicOn, 'mic', 'mic-off');
         });
 
         document.getElementById('btn-toggle-cam').addEventListener('click', () => {
             isCamOn = !isCamOn;
             localStream.getVideoTracks().forEach(track => track.enabled = isCamOn);
-
-            const btn = document.getElementById('btn-toggle-cam');
-            const icon = document.getElementById('icon-cam');
-
-            if (isCamOn) {
-                btn.className = "p-3 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-xl transition text-zinc-800 dark:text-zinc-200";
-                icon.setAttribute('data-lucide', 'video');
-            } else {
-                btn.className = "p-3 bg-red-600 hover:bg-red-700 text-white rounded-xl transition";
-                icon.setAttribute('data-lucide', 'video-off');
-            }
-            lucide.createIcons();
+            updateButtonState('btn-toggle-cam', 'icon-cam', isCamOn, 'video', 'video-off');
         });
 
-        // --- LEAVE ROOM ---
+        function updateButtonState(btnId, iconId, isOn, onIcon, offIcon) {
+            const btn = document.getElementById(btnId);
+            const icon = document.getElementById(iconId);
+            if (isOn) {
+                btn.className = "p-3 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-xl transition text-zinc-800 dark:text-zinc-200";
+                icon.setAttribute('data-lucide', onIcon);
+            } else {
+                btn.className = "p-3 bg-red-600 hover:bg-red-700 text-white rounded-xl transition";
+                icon.setAttribute('data-lucide', offIcon);
+            }
+            lucide.createIcons();
+        }
+
         document.getElementById('btn-leave-room').addEventListener('click', () => {
             if (confirm("Apakah Anda yakin ingin keluar dari rapat?")) {
+                if (peer) {
+                    db.ref(`rooms/${currentRoomCode}/${myPeerId}`).remove();
+                    peer.destroy();
+                }
                 window.location.reload();
             }
         });
 
-        window.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
-        });
+        window.addEventListener('DOMContentLoaded', () => lucide.createIcons());
     </script>
 </body>
 </html>
